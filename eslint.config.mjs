@@ -31,7 +31,15 @@ const eslintConfig = [
     },
   },
   {
-    ignores: ['.next/', 'src/payload-types.ts', 'src/payload-generated-schema.ts'],
+    // Generated files: next-env.d.ts (Next.js), payload types/schema (Payload),
+    // migrations (payload migrate:create).
+    ignores: [
+      '.next/',
+      'next-env.d.ts',
+      'src/payload-types.ts',
+      'src/payload-generated-schema.ts',
+      'src/migrations/',
+    ],
   },
 ]
 
