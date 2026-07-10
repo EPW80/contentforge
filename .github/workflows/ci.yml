@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    services:
+      # Mirrors docker-compose.yml: Postgres 16 exposed on 5434. The int test
+      # globalSetup connects to the default `postgres` database and recreates
+      # `contentforge_test` itself.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: contentforge
+          POSTGRES_PASSWORD: contentforge
+          POSTGRES_DB: contentforge
+        ports: ['5434:5432']
+        options: >-
+          --health-cmd "pg_isready -U contentforge"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # The Payload config fails fast on missing PAYLOAD_SECRET/DATABASE_URI,
+      # so every step that imports it (types, tests, build) needs these set.
+      DATABASE_URI: postgres://contentforge:contentforge@127.0.0.1:5434/contentforge
+      PAYLOAD_SECRET: ci-only-secret
+      REVALIDATE_SECRET: ci-only-secret
+      NEXT_REVALIDATE_URL: http://localhost:3000
+      S3_ENDPOINT: http://localhost:9002
+      S3_REGION: us-east-1
+      S3_BUCKET: contentforge
+      S3_ACCESS_KEY: ci
+      S3_SECRET_KEY: ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Types must be in sync with collection configs
+        run: |
+          pnpm generate:types
+          git diff --exit-code src/payload-types.ts
+      - run: pnpm typecheck
+      - run: pnpm lint --max-warnings=0
+      - run: pnpm test
+      - run: pnpm build
