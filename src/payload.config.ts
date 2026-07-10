@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url'
 import sharp from 'sharp'
 
 import { editor } from '@/lib/editor'
+import { requiredEnv } from '@/lib/env'
 import { Authors } from '@/collections/Authors'
 import { Media } from '@/collections/Media'
 import { Posts } from '@/collections/Posts'
@@ -14,6 +15,14 @@ import { Users } from '@/collections/Users'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
+
+// Non-fatal: media may be unused in some contexts (seed, type generation),
+// but empty credentials silently break every upload, so say something.
+if (!process.env.S3_ACCESS_KEY || !process.env.S3_SECRET_KEY) {
+  console.warn(
+    'S3_ACCESS_KEY / S3_SECRET_KEY are not set — media uploads will fail until they are configured.',
+  )
+}
 
 export default buildConfig({
   admin: {
@@ -24,13 +33,13 @@ export default buildConfig({
   },
   collections: [Tenants, Users, Authors, Media, Posts],
   editor,
-  secret: process.env.PAYLOAD_SECRET || '',
+  secret: requiredEnv('PAYLOAD_SECRET'),
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
   },
   db: postgresAdapter({
     pool: {
-      connectionString: process.env.DATABASE_URI || '',
+      connectionString: requiredEnv('DATABASE_URI'),
     },
   }),
   sharp,

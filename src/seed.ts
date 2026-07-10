@@ -36,6 +36,12 @@ function paragraph(text: string): Post['content'] {
 }
 
 async function seed() {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'Refusing to seed in production: the seed wipes all data and creates weak demo credentials.',
+    )
+  }
+
   const payload = await getPayload({ config: await config })
 
   // Dev seed: wipe collections so re-running is idempotent.
@@ -57,14 +63,18 @@ async function seed() {
 
   await payload.create({
     collection: 'users',
-    data: { email: 'admin@contentforge.dev', password: 'admin123', role: 'admin' },
+    data: {
+      email: 'admin@contentforge.dev',
+      password: process.env.SEED_ADMIN_PASSWORD || 'admin123',
+      role: 'admin',
+    },
     overrideAccess: true,
   })
   await payload.create({
     collection: 'users',
     data: {
       email: 'editor-a@contentforge.dev',
-      password: 'editor123',
+      password: process.env.SEED_EDITOR_PASSWORD || 'editor123',
       role: 'editor',
       tenant: tenantA.id,
     },
@@ -74,7 +84,7 @@ async function seed() {
     collection: 'users',
     data: {
       email: 'editor-b@contentforge.dev',
-      password: 'editor123',
+      password: process.env.SEED_EDITOR_PASSWORD || 'editor123',
       role: 'editor',
       tenant: tenantB.id,
     },
@@ -129,7 +139,9 @@ async function seed() {
   })
 
   payload.logger.info('Seed complete: 2 tenants, 1 admin, 2 editors, 2 authors, 3 posts.')
-  process.exit(0)
+  // No process.exit(0): let in-flight async work (e.g. best-effort revalidate
+  // fetches from afterChange hooks) settle, then exit naturally.
+  await payload.destroy()
 }
 
 seed().catch((err) => {
