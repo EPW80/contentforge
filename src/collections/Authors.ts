@@ -1,7 +1,13 @@
 import type { CollectionConfig } from 'payload'
 
 import { formatSlug } from '@/lib/slugify'
-import { combineAccess, isAdmin, isAdminOrEditor, tenantFromUser } from '@/lib/access'
+import {
+  combineAccess,
+  enforceTenantOnWrite,
+  isAdmin,
+  isAdminOrEditor,
+  tenantFromUser,
+} from '@/lib/access'
 
 export const Authors: CollectionConfig = {
   slug: 'authors',
@@ -10,12 +16,18 @@ export const Authors: CollectionConfig = {
     defaultColumns: ['name', 'tenant', 'updatedAt'],
   },
   access: {
-    create: combineAccess(isAdminOrEditor, tenantFromUser),
+    // Boolean, not combineAccess(..., tenantFromUser): a Where clause is inert
+    // on create (no document exists yet to filter). Tenant isolation on write
+    // is enforced by the enforceTenantOnWrite hook below.
+    create: isAdminOrEditor,
     // anon → true (author profiles are public); editor → scoped to their tenant
     read: tenantFromUser,
     update: combineAccess(isAdminOrEditor, tenantFromUser),
     delete: isAdmin,
     admin: isAdminOrEditor,
+  },
+  hooks: {
+    beforeValidate: [enforceTenantOnWrite],
   },
   fields: [
     {

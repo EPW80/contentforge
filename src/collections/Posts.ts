@@ -5,6 +5,7 @@ import { revalidateTag } from '@/lib/revalidate'
 import { formatSlug } from '@/lib/slugify'
 import {
   combineAccess,
+  enforceTenantOnWrite,
   isAdmin,
   isAdminOrEditor,
   isPublishedOrAdmin,
@@ -23,6 +24,7 @@ export const Posts: CollectionConfig = {
     drafts: true,
   },
   hooks: {
+    beforeValidate: [enforceTenantOnWrite],
     afterChange: [
       async ({ doc, previousDoc }) => {
         const isPublished = doc._status === 'published'
@@ -37,6 +39,9 @@ export const Posts: CollectionConfig = {
     ],
   },
   access: {
+    // Boolean, not combineAccess(..., tenantFromUser): a Where clause is inert
+    // on create (no document exists yet to filter). Tenant isolation on write
+    // is enforced by the enforceTenantOnWrite hook above.
     create: isAdminOrEditor,
     read: combineAccess(isPublishedOrAdmin, tenantFromUser),
     update: combineAccess(isAdminOrEditor, tenantFromUser),
