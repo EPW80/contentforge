@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Image from 'next/image'
 import { unstable_cache } from 'next/cache'
 import { notFound } from 'next/navigation'
 import { RichText } from '@payloadcms/richtext-lexical/react'
@@ -68,14 +69,13 @@ export default async function PostPage({ params }: { params: Promise<Params> }) 
 
   return (
     <main className="mx-auto max-w-2xl p-8">
-      {featuredImage?.url && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+      {featuredImage?.url && featuredImage.width && featuredImage.height && (
+        <Image
           src={featuredImage.url}
           alt={featuredImage.alt ?? post.title}
           className="mb-6 w-full rounded-lg object-cover"
-          width={featuredImage.width ?? undefined}
-          height={featuredImage.height ?? undefined}
+          width={featuredImage.width}
+          height={featuredImage.height}
         />
       )}
       <h1 className="text-3xl font-bold">{post.title}</h1>
