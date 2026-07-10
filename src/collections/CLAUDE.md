@@ -73,5 +73,6 @@ Tenant isolation lives on the `tenant` relationship field. Every tenant-scoped c
 
 1. Have a `tenant` relationship field with `required: true`.
 2. Filter `read` access with `tenantFromUser` from `src/lib/access.ts`.
+3. Wire `enforceTenantOnWrite` in `hooks.beforeValidate` — access `Where` clauses are inert on `create`, so read-side filtering alone does NOT stop cross-tenant writes (see `src/lib/CLAUDE.md`). `tests/unit/collections-wiring.spec.ts` asserts this; add new tenant-scoped collections to it.
 
 Don't add tenant filtering inline — it drifts. Keep it in `src/lib/access.ts`.

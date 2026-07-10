@@ -1,67 +1,59 @@
-# Payload Blank Template
+# ContentForge
 
-This template comes configured with the bare minimum to get started on anything you need.
+Multi-tenant headless CMS and publication platform. Editors manage posts, authors, and media scoped to their own tenant; readers get a public Next.js frontend per tenant with tag-based on-demand revalidation.
+
+## Stack
+
+| Layer | Tech |
+| ----- | ---- |
+| CMS | [Payload 3](https://payloadcms.com) (self-hosted, Lexical rich text) |
+| Frontend | Next.js 15 App Router, React 19, Tailwind CSS v4 |
+| Database | PostgreSQL 16 (Payload Drizzle adapter) |
+| Media storage | S3-compatible (MinIO in dev) |
+| Tests | Vitest — unit tier + integration tier against a real Payload instance |
 
 ## Quick start
 
-This template can be deployed directly from our Cloud hosting and it will setup MongoDB and cloud S3 object storage for media.
+Requires Node ≥ 20.9, pnpm, and Docker.
 
-## Quick Start - local setup
+```bash
+docker compose up -d        # Postgres on :5434, MinIO on :9002 (console :9003)
+cp .env.example .env        # dev defaults match docker-compose
+pnpm install
+pnpm db:migrate
+pnpm db:seed                # demo tenants (acme, globex), users, posts — dev only
+pnpm dev                    # http://localhost:3000
+```
 
-To spin up this template locally, follow these steps:
+Then:
 
-### Clone
+- Public site: <http://localhost:3000/acme> and <http://localhost:3000/globex>
+- Admin panel: <http://localhost:3000/admin> — `admin@contentforge.dev` / `admin123` (dev seed credentials; override with `SEED_ADMIN_PASSWORD` / `SEED_EDITOR_PASSWORD`)
 
-After you click the `Deploy` button above, you'll want to have standalone copy of this repo on your machine. If you've already cloned this repo, skip to [Development](#development).
+Ports are offset (5434, 9002/9003) so the stack coexists with default local Postgres/MinIO installs.
 
-### Development
+## Tenant isolation — the invariant that matters
 
-1. First [clone the repo](#clone) if you have not done so already
-2. `cd my-project && cp .env.example .env` to copy the example environment variables. You'll need to add the `MONGODB_URL` from your Cloud project to your `.env` if you want to use S3 storage and the MongoDB database that was created for you.
+Every content collection (posts, authors, media) belongs to exactly one tenant, and editors must never read or write outside their own tenant.
 
-3. `pnpm install && pnpm dev` to install dependencies and start the dev server
-4. open `http://localhost:3000` to open the app in your browser
+- **Reads** are scoped by the `tenantFromUser` access function (a `Where` clause per request).
+- **Writes** are enforced by the `enforceTenantOnWrite` hook, because access `Where` clauses are inert on `create` — the hook forces the editor's own tenant on create and update.
 
-That's it! Changes made in `./src` will be reflected in your app. Follow the on-screen instructions to login and create your first admin user. Then check out [Production](#production) once you're ready to build and serve your app, and [Deployment](#deployment) when you're ready to go live.
+Both live in [src/lib/access.ts](src/lib/access.ts). Every tenant-scoped collection must wire the hook in `hooks.beforeValidate`; `tests/unit/collections-wiring.spec.ts` enforces this and `tests/int/tenant-isolation.int.spec.ts` proves it end-to-end against a real database.
 
-#### Docker (Optional)
+## Testing
 
-If you prefer to use Docker for local development instead of a local MongoDB instance, the provided docker-compose.yml file can be used.
+```bash
+pnpm test:unit       # fast, no DB
+pnpm test:int        # needs docker compose up; uses a dedicated contentforge_test DB
+pnpm test            # both
+pnpm test:coverage   # V8 coverage report
+```
 
-To do so, follow these steps:
+CI (GitHub Actions) runs types-drift check, typecheck, strict lint, both test tiers, and a production build on every push and PR.
 
-- Modify the `MONGODB_URL` in your `.env` file to `mongodb://127.0.0.1/<dbname>`
-- Modify the `docker-compose.yml` file's `MONGODB_URL` to match the above `<dbname>`
-- Run `docker-compose up` to start the database, optionally pass `-d` to run in the background.
+## Development notes
 
-## How it works
-
-The Payload config is tailored specifically to the needs of most websites. It is pre-configured in the following ways:
-
-### Collections
-
-See the [Collections](https://payloadcms.com/docs/configuration/collections) docs for details on how to extend this functionality.
-
-- #### Users (Authentication)
-
-  Users are auth-enabled collections that have access to the admin panel.
-
-  For additional help, see the official [Auth Example](https://github.com/payloadcms/payload/tree/main/examples/auth) or the [Authentication](https://payloadcms.com/docs/authentication/overview#authentication-overview) docs.
-
-- #### Media
-
-  This is the uploads enabled collection. It features pre-configured sizes, focal point and manual resizing to help you manage your pictures.
-
-### Docker
-
-Alternatively, you can use [Docker](https://www.docker.com) to spin up this template locally. To do so, follow these steps:
-
-1. Follow [steps 1 and 2 from above](#development), the docker-compose file will automatically use the `.env` file in your project root
-1. Next run `docker-compose up`
-1. Follow [steps 4 and 5 from above](#development) to login and create your first admin user
-
-That's it! The Docker instance will help you get up and running quickly while also standardizing the development environment across your teams.
-
-## Questions
-
-If you have any issues or questions, reach out to us on [Discord](https://discord.com/invite/payload) or start a [GitHub discussion](https://github.com/payloadcms/payload/discussions).
+- After any collection schema change: `pnpm generate:types` (CI fails on stale types), then `pnpm payload migrate:create` for the schema migration.
+- Env vars are validated at startup — missing `PAYLOAD_SECRET` or `DATABASE_URI` fails fast. Generate real secrets with `openssl rand -hex 32`.
+- Agent-facing conventions live in [CLAUDE.md](CLAUDE.md) and per-module specs under `src/*/CLAUDE.md`.

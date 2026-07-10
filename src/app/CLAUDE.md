@@ -1,74 +1,65 @@
 # Next.js App Module
 
-App Router pages and layouts. Payload is the data source; this layer handles routing, rendering, and draft preview.
+App Router pages and layouts. Payload is the data source; this layer handles routing and rendering.
 
 ## Fetch Pattern
 
-Always use the Payload REST API (not the local API) from frontend routes so access control is enforced.
+Use the Payload **local API** through the singleton, with `overrideAccess: false` so the access functions in `src/lib/access.ts` are enforced exactly as they are over REST:
 
 ```ts
-// src/lib/payload-client.ts — use this, don't fetch() inline
 import { getPayloadClient } from '@/lib/payload-client'
 
 const payload = await getPayloadClient()
 const posts = await payload.find({
   collection: 'posts',
-  where: { _status: { equals: 'published' } },
-  draft: false,   // IMPORTANT: always explicit
+  where: {
+    and: [{ tenant: { equals: tenantId } }, { _status: { equals: 'published' } }],
+  },
+  draft: false, // IMPORTANT: always explicit on public routes
   depth: 1,
+  overrideAccess: false, // enforce access functions
 })
 ```
 
-Don't construct fetch() calls to `/api/posts` manually — use the Payload client singleton.
+The one sanctioned exception: resolving a tenant **slug → id** uses `overrideAccess: true`, because `Tenants.read` is admin-only but the slug lookup itself is not sensitive (see `[tenant]/page.tsx`). Don't add further `overrideAccess: true` reads without a comment justifying it.
+
+Don't construct `fetch()` calls to `/api/posts` manually — use the client singleton.
 
 ## Draft Mode (Preview)
 
-Draft mode is triggered via `/api/preview` route handler.
-
-- Don't enable draft mode without verifying the `previewSecret` in the query param.
-- Do call `draftMode().enable()` only inside the route handler, not in page components.
-- Preview renders at `/preview/[collection]/[slug]` — these routes must pass `draft: true` to the client.
-
-```ts
-// Wrong — leaks drafts to production
-const post = await payload.findByID({ collection: 'posts', id, draft: true })
-
-// Correct — gate on draftMode()
-const { isEnabled } = draftMode()
-const post = await payload.findByID({ collection: 'posts', id, draft: isEnabled })
-```
+**Not implemented.** The frontend always fetches with `draft: false` and filters on `_status: 'published'`. If preview is added later: enable `draftMode()` only inside a secret-verified route handler, and gate `draft:` on `draftMode().isEnabled` — never hardcode `draft: true` on a public route.
 
 ## ISR / Revalidation
 
-Use on-demand revalidation via tags, not time-based `revalidate: N`.
+On-demand revalidation via tags, not time-based `revalidate: N`.
 
 ```ts
-// In page component
-unstable_cache(fetchPost, ['post', slug], { tags: [`post-${slug}`] })
+// In page components — cache reads with tags
+unstable_cache(fetchPost, ['post'], { tags: ['posts'] })
 
-// In Payload afterChange hook (server)
-await fetch(`${process.env.NEXT_REVALIDATE_URL}/api/revalidate`, {
-  method: 'POST',
-  body: JSON.stringify({ tag: `post-${doc.slug}` }),
-  headers: { Authorization: `Bearer ${process.env.REVALIDATE_SECRET}` },
-})
+// In Payload afterChange hooks — use the helper, never raw fetch
+import { revalidateTag } from '@/lib/revalidate'
+await revalidateTag(`post-${doc.slug}`)
 ```
 
-IMPORTANT: `NEXT_REVALIDATE_URL` and `REVALIDATE_SECRET` must be set in `.env.local` and Vercel env — missing these causes silent stale content.
+The helper POSTs to `/api/revalidate` (handler: `(frontend)/api/revalidate/route.ts`), which verifies `REVALIDATE_SECRET` and calls Next's `revalidateTag`.
+
+IMPORTANT: `NEXT_REVALIDATE_URL` and `REVALIDATE_SECRET` must be set in the deployment env — missing them causes silent stale content (the helper is deliberately best-effort).
 
 ## Route Conventions
 
-```
+```text
 app/
-  (frontend)/           # Public-facing routes (layout = site chrome)
+  (frontend)/               # Public-facing routes (layout = site chrome)
     [tenant]/
-      page.tsx          # Tenant homepage
+      page.tsx              # Tenant homepage
       posts/[slug]/
-        page.tsx        # Post detail
-  (admin)/              # Payload admin panel (proxied, not reimplemented)
-  api/
-    preview/route.ts    # Draft mode toggle
-    revalidate/route.ts # On-demand revalidation webhook
+        page.tsx            # Post detail
+    api/
+      revalidate/route.ts   # On-demand revalidation webhook
+  (payload)/                # Payload admin panel + REST/GraphQL (generated)
+    admin/[[...segments]]/
+    api/[...slug]/
 ```
 
 Don't add business logic to `layout.tsx` — layouts are for chrome only. Put data fetching in `page.tsx`.
