@@ -1,6 +1,7 @@
 import type { CollectionConfig } from 'payload'
 
 import { formatSlug } from '@/lib/slugify'
+import { revalidateTag } from '@/lib/revalidate'
 import { isAdmin } from '@/lib/access'
 
 export const Tenants: CollectionConfig = {
@@ -8,6 +9,13 @@ export const Tenants: CollectionConfig = {
   admin: {
     useAsTitle: 'name',
     defaultColumns: ['name', 'slug', 'updatedAt'],
+  },
+  hooks: {
+    afterChange: [
+      async () => {
+        await revalidateTag('tenants')
+      },
+    ],
   },
   access: {
     create: isAdmin,
