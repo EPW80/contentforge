@@ -32,6 +32,18 @@ Then:
 
 Ports are offset (5434, 9002/9003) so the stack coexists with default local Postgres/MinIO installs.
 
+## Screenshots
+
+| Public homepage | Post detail |
+| --- | --- |
+| ![Homepage listing tenant publications](docs/screenshots/home.png) | ![Published post rendered on the public frontend](docs/screenshots/post-detail.png) |
+| The root route lists every publication, fetched with `unstable_cache` tagged `tenants`. | A published post served per-tenant at `/[tenant]/posts/[slug]`. |
+
+| Tenant homepage | Admin panel |
+| --- | --- |
+| ![Acme Press tenant homepage](docs/screenshots/tenant-acme.png) | ![Payload admin login](docs/screenshots/admin-login.png) |
+| A single tenant's homepage with its published posts. | The self-hosted Payload admin at `/admin`. |
+
 ## Tenant isolation — the invariant that matters
 
 Every content collection (posts, authors, media) belongs to exactly one tenant, and editors must never read or write outside their own tenant.
