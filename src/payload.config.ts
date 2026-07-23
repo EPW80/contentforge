@@ -25,6 +25,7 @@ if (!process.env.S3_ACCESS_KEY || !process.env.S3_SECRET_KEY) {
 }
 
 export default buildConfig({
+  serverURL: process.env.NEXT_PUBLIC_SERVER_URL || undefined,
   admin: {
     user: Users.slug,
     importMap: {
@@ -40,6 +41,10 @@ export default buildConfig({
   db: postgresAdapter({
     pool: {
       connectionString: requiredEnv('DATABASE_URI'),
+      // Serverless: every function instance gets its own pool, so keep the
+      // per-instance cap small and let the platform pooler absorb fan-out.
+      max: Number(process.env.PG_POOL_MAX) || 5,
+      connectionTimeoutMillis: 10_000,
     },
   }),
   sharp,
@@ -48,13 +53,16 @@ export default buildConfig({
       collections: { media: true },
       bucket: process.env.S3_BUCKET || 'contentforge',
       config: {
-        endpoint: process.env.S3_ENDPOINT || 'http://localhost:9000',
         region: process.env.S3_REGION || 'us-east-1',
         credentials: {
           accessKeyId: process.env.S3_ACCESS_KEY || '',
           secretAccessKey: process.env.S3_SECRET_KEY || '',
         },
-        forcePathStyle: true, // required for MinIO path-style URLs
+        // Custom endpoint + path-style URLs are MinIO-only; real AWS S3 must
+        // leave S3_ENDPOINT unset.
+        ...(process.env.S3_ENDPOINT
+          ? { endpoint: process.env.S3_ENDPOINT, forcePathStyle: true as const }
+          : {}),
       },
     }),
   ],

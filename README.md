@@ -64,6 +64,35 @@ pnpm test:coverage   # V8 coverage report
 
 CI (GitHub Actions) runs types-drift check, typecheck, strict lint, both test tiers, and a production build on every push and PR.
 
+## Deployment (Vercel + Neon + AWS S3)
+
+Production runs on Vercel with Neon Postgres and a **private** AWS S3 bucket (media is
+streamed through Payload's `/api/media/file/*` route with tenant access control — no
+public bucket policy).
+
+- `vercel.json` sets the build to `pnpm run db:migrate && pnpm run build`: migrations
+  run against the production `DATABASE_URI` before every build, then the build fails
+  fast if the schema and code disagree.
+- Required env vars in Vercel: `DATABASE_URI` (Neon **pooled** string with
+  `?sslmode=require`), `PAYLOAD_SECRET`, `REVALIDATE_SECRET`, `S3_REGION`, `S3_BUCKET`,
+  `S3_ACCESS_KEY`, `S3_SECRET_KEY`, and after the first deploy `NEXT_REVALIDATE_URL` +
+  `NEXT_PUBLIC_SERVER_URL` (the production URL, no trailing slash). Leave `S3_ENDPOINT`
+  unset — it is MinIO-only.
+- **Schema-change workflow (load-bearing):** push mode never runs in production, so a
+  collection change deployed without a committed migration silently never reaches the
+  prod schema. After any collection change:
+
+  ```bash
+  pnpm generate:types
+  pnpm payload migrate:create <name>
+  git add src/migrations payload-types.ts && git commit
+  ```
+
+  The Vercel build then applies the migration on the next deploy.
+- If a migration ever fails mid-apply, inspect with `pnpm payload migrate:status`
+  pointed at Neon's **direct** (non-pooled) connection string and fix forward with a
+  new migration.
+
 ## Development notes
 
 - After any collection schema change: `pnpm generate:types` (CI fails on stale types), then `pnpm payload migrate:create` for the schema migration.

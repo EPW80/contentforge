@@ -17,3 +17,8 @@ export const DELETE = REST_DELETE(config)
 export const PATCH = REST_PATCH(config)
 export const PUT = REST_PUT(config)
 export const OPTIONS = REST_OPTIONS(config)
+
+// Image uploads run sharp resizes synchronously; the platform default
+// function timeout is too short for large files. Re-add if Payload
+// regenerates this file.
+export const maxDuration = 60
