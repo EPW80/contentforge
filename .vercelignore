@@ -1,0 +1,8 @@
+# Never upload local env files — production env lives in Vercel project
+# settings, and an uploaded .env leaks into the Next.js runtime for any
+# variable the dashboard leaves unset (e.g. S3_ENDPOINT must stay unset).
+.env*
+docs/
+tests/
+Dockerfile
+docker-compose.yml
